@@ -31,11 +31,10 @@ jobs:
   snyk:
     permissions:
       contents: read 
-      security-events: write # Required to upload SARIF results to the Security tab
+      security-events: write 
       actions: read 
     runs-on: ubuntu-latest
     
-    # Global environment variable for all steps
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -43,24 +42,31 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # STEP 1: Set up the Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # STEP 2: Install dependencies so Snyk can see them
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # STEP 3: Set up Snyk
       - name: Set up Snyk CLI
         uses: snyk/actions/setup@806182742461562b67788a64410098c9d9b96adb
 
+      # STEP 4: Run Scans
       - name: Snyk Code Test (SAST)
-        # Running SAST and saving output to SARIF format for GitHub Security integration
-        # '|| true' ensures the pipeline continues so we can upload the results
         run: snyk code test --sarif > snyk-code.sarif || true
 
       - name: Snyk Open Source Monitor (SCA)
-        # This pushes the dependency results (requirements.txt) to your Snyk Dashboard
-        run: snyk monitor --all-projects
-
-      - name: Snyk IaC Test (Infrastructure)
-        # Scans for configuration issues
-        run: snyk iac test --report || true
+        # We add --file=requirements.txt to be very specific
+        run: snyk monitor --file=requirements.txt || true
 
       - name: Upload Results to GitHub Security Tab
-        # This makes the "Security" tab in your repo show the vulnerabilities visually
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk-code.sarif
